@@ -9,6 +9,8 @@ from pathlib import Path
 _root = Path(__file__).resolve().parent
 if str(_root) not in sys.path:
     sys.path.insert(0, str(_root))
+os.chdir(_root)
+(_root / "data").mkdir(parents=True, exist_ok=True)
 
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
@@ -118,8 +120,6 @@ async def main():
     if settings.bot_token == "YOUR_BOT_TOKEN_HERE":
         logger.error("Установите BOT_TOKEN!")
         sys.exit(1)
-
-    os.makedirs("data", exist_ok=True)
 
     db_manager = DatabaseManager(settings.database_url)
     await db_manager.create_tables()
