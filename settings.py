@@ -1,11 +1,21 @@
-from pydantic_settings import BaseSettings
-from pydantic import Field
+import json
+
+from pydantic import AliasChoices, Field, computed_field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class AppSettings(BaseSettings):
+    """Settings from .env. ADMIN_IDS: comma-separated IDs or JSON array, e.g. 123,456 or [123,456]."""
+
+    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+
     bot_token: str = Field(default="......")
     gemini_api_key: str = Field(default="......")
-    admin_ids: list[int] = Field(default_factory=list)
+    # Stored as str so pydantic-settings does not json.loads() the env value (breaks on "1,2,3").
+    admin_ids_csv: str = Field(
+        default="",
+        validation_alias=AliasChoices("ADMIN_IDS", "admin_ids_csv"),
+    )
     group_invite_link: str = Field(default=".........")
     database_url: str = Field(default="sqlite+aiosqlite:///data/stratton_bot.db")
     timezone: str = Field(default="Asia/Almaty")
@@ -18,9 +28,21 @@ class AppSettings(BaseSettings):
     remind_before_minutes: int = Field(default=15)
     backup_dir: str = Field(default="data/backups")
 
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
+    @computed_field
+    @property
+    def admin_ids(self) -> list[int]:
+        s = self.admin_ids_csv.strip()
+        if not s:
+            return []
+        if s.startswith("["):
+            try:
+                data = json.loads(s)
+                if isinstance(data, list):
+                    return [int(x) for x in data]
+            except (json.JSONDecodeError, ValueError, TypeError):
+                pass
+            return []
+        return [int(x.strip()) for x in s.split(",") if x.strip()]
 
 
 def get_settings() -> AppSettings:
