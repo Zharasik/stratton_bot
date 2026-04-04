@@ -1,127 +1,154 @@
 import asyncio
 import logging
+import os
+import shutil
 import sys
-from datetime import timedelta
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
+
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
-from config import BOT_TOKEN, ADMIN_IDS, TASK_HOURS, REMIND_BEFORE_MINUTES, get_task_for_user, get_task_variant_number
-from database import Database, now_local
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+
+from settings import get_settings
+from database import DatabaseManager
+from repositories import (
+    UserRepository, SlotRepository, TestingRepository,
+    SubmissionRepository, NdaRepository, StatsRepository,
+)
+from infrastructure import GeminiOCR
+from services import TaskService
+from handlers import build_handlers
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s | %(levelname)-8s | %(name)-20s | %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
-    handlers=[logging.StreamHandler(sys.stdout), logging.FileHandler("data/bot.log", encoding="utf-8")]
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler("data/bot.log", encoding="utf-8"),
+    ],
 )
 logger = logging.getLogger(__name__)
 
 
 class DatabaseMiddleware:
-    def __init__(self, db: Database):
-        self.db = db
+    def __init__(self, repos: dict):
+        self._repos = repos
+
     async def __call__(self, handler, event, data):
-        data["db"] = self.db
+        data.update(self._repos)
         return await handler(event, data)
 
 
-async def scheduler(bot: Bot, db: Database):
-    last_backup_date = None
-    while True:
+async def remind_job(bot: Bot, settings, slot_repo: SlotRepository):
+    tz = ZoneInfo(settings.timezone)
+    now = datetime.now(tz)
+    remind_time = now + timedelta(minutes=settings.remind_before_minutes)
+    if remind_time.date() != now.date():
+        return
+    date_str = now.strftime("%Y-%m-%d")
+    hour_str = f"{remind_time.hour:02d}:00"
+    rows = await slot_repo.get_slots_to_remind(date_str, hour_str)
+    for r in rows:
         try:
-            n = now_local()
-            date_str = n.strftime("%Y-%m-%d")
-            current_hour = f"{n.hour:02d}:00"
-
-            remind_time = n + timedelta(minutes=REMIND_BEFORE_MINUTES)
-            remind_hour = f"{remind_time.hour:02d}:00"
-            if remind_time.date() == n.date():
-                rows = await db.get_slots_to_remind(date_str, remind_hour)
-                for r in rows:
-                    try:
-                        await bot.send_message(r["uid"],
-                            f"⏰ <b>Напоминание!</b>\n\nВаше тестирование начнётся через {REMIND_BEFORE_MINUTES} минут ({r['slot_start']}).\nПодготовьтесь!",
-                            parse_mode="HTML")
-                        await db.mark_reminded(r["id"])
-                        logger.info("Remind sent to %s", r["uid"])
-                    except Exception as e:
-                        logger.error("Remind error %s: %s", r["uid"], e)
-
-            rows = await db.get_slots_to_notify(date_str, current_hour)
-            for r in rows:
-                try:
-                    uid = r["uid"]
-                    task = get_task_for_user(uid)
-                    deadline_dt = n.replace(minute=0, second=0) + timedelta(hours=TASK_HOURS)
-                    deadline = deadline_dt.strftime("%H:%M")
-                    await bot.send_message(uid,
-                        f"🔔 <b>Тестирование началось!</b>\n\n🕐 Начало: {r['slot_start']}\n⏱ Дедлайн: {deadline} (3 часа)\n\nЗадание ниже 👇",
-                        parse_mode="HTML")
-                    await bot.send_message(uid, task, parse_mode="HTML")
-                    await db.db.execute("UPDATE testing_records SET status = 'in_progress' WHERE id = ?", (r["tr_id"],))
-                    await db.db.commit()
-                    await db.mark_notified(r["id"])
-                    for admin_id in ADMIN_IDS:
-                        try:
-                            user = await db.get_user(uid)
-                            name = user["full_name"] if user else str(uid)
-                            await bot.send_message(admin_id, f"📋 Кандидат <b>{name}</b> начал тестирование (вариант {get_task_variant_number(uid)})", parse_mode="HTML")
-                        except Exception:
-                            pass
-                    logger.info("Start notification sent to %s", uid)
-                except Exception as e:
-                    logger.error("Notify error %s: %s", r.get("uid"), e)
-
-            expired = await db.expire_old_slots(TASK_HOURS)
-            for uid in expired:
-                try:
-                    await bot.send_message(uid, "⏰ <b>Время вышло!</b>\n\nВаш слот истёк. Вы можете записаться снова.", parse_mode="HTML")
-                    logger.info("Expired notification sent to %s", uid)
-                except Exception:
-                    pass
-
-            today = n.date()
-            if last_backup_date != today and n.hour >= 3:
-                try:
-                    db.backup()
-                    last_backup_date = today
-                except Exception as e:
-                    logger.error("Backup error: %s", e)
-
+            await bot.send_message(
+                r["user_id"],
+                f"⏰ <b>Через {settings.remind_before_minutes} мин!</b>\nПодготовьтесь!",
+                parse_mode="HTML",
+            )
+            await slot_repo.mark_reminded(r["slot_id"])
         except Exception as e:
-            logger.error("Scheduler error: %s", e)
-        await asyncio.sleep(30)
+            logger.error("Remind error %s: %s", r["user_id"], e)
+
+
+async def notify_job(bot: Bot, settings, slot_repo: SlotRepository, testing_repo: TestingRepository):
+    tz = ZoneInfo(settings.timezone)
+    now = datetime.now(tz)
+    date_str = now.strftime("%Y-%m-%d")
+    hour_str = f"{now.hour:02d}:00"
+    rows = await slot_repo.get_slots_to_notify(date_str, hour_str)
+    for r in rows:
+        try:
+            uid = r["user_id"]
+            task = TaskService.get_task_text(uid)
+            dl = TaskService.get_deadline(date_str, hour_str, settings.task_hours)
+            await bot.send_message(uid, f"🔔 <b>Старт!</b>\n🕐 {hour_str}\n⏱ До {dl}", parse_mode="HTML")
+            await bot.send_message(uid, task, parse_mode="HTML")
+            await testing_repo.set_in_progress(r["tr_id"])
+            await slot_repo.mark_notified(r["slot_id"])
+        except Exception as e:
+            logger.error("Notify error %s: %s", r.get("user_id"), e)
+
+
+async def expire_job(bot: Bot, settings, testing_repo: TestingRepository, slot_repo: SlotRepository):
+    tz = ZoneInfo(settings.timezone)
+    expired = await testing_repo.expire_old(settings.task_hours, tz, slot_repo)
+    for uid in expired:
+        try:
+            await bot.send_message(uid, "⏰ <b>Время вышло!</b>\nМожете записаться снова.", parse_mode="HTML")
+        except Exception:
+            pass
+
+
+def backup_job(db_path: str, backup_dir: str):
+    os.makedirs(backup_dir, exist_ok=True)
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    shutil.copy2(db_path, os.path.join(backup_dir, f"backup_{ts}.db"))
+    old = sorted(os.listdir(backup_dir))
+    while len(old) > 7:
+        os.remove(os.path.join(backup_dir, old.pop(0)))
+    logger.info("Backup done")
 
 
 async def main():
-    logger.info("Запуск Stratton Internship Bot")
-    logger.info("ADMIN_IDS: %s", ADMIN_IDS)
-    if BOT_TOKEN == "YOUR_BOT_TOKEN_HERE":
-        logger.error("Установите BOT_TOKEN в .env!")
+    settings = get_settings()
+    logger.info("Запуск Stratton Bot | ADMINS: %s", settings.admin_ids)
+
+    if settings.bot_token == "YOUR_BOT_TOKEN_HERE":
+        logger.error("Установите BOT_TOKEN!")
         sys.exit(1)
-    db = Database("data/stratton_bot.db")
-    await db.connect()
+
+    os.makedirs("data", exist_ok=True)
+
+    db_manager = DatabaseManager(settings.database_url)
+    await db_manager.create_tables()
+
+    user_repo = UserRepository(db_manager)
+    slot_repo = SlotRepository(db_manager)
+    testing_repo = TestingRepository(db_manager)
+    submission_repo = SubmissionRepository(db_manager)
+    nda_repo = NdaRepository(db_manager)
+    stats_repo = StatsRepository(db_manager)
+    ocr = GeminiOCR(settings.gemini_api_key)
+
     session = AiohttpSession(timeout=300)
-    bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML), session=session)
+    bot = Bot(token=settings.bot_token, default=DefaultBotProperties(parse_mode=ParseMode.HTML), session=session)
     dp = Dispatcher(storage=MemoryStorage())
-    dp.message.middleware(DatabaseMiddleware(db))
-    dp.callback_query.middleware(DatabaseMiddleware(db))
-    from handlers import admin_router, test_router, start_router, testing_router, nda_router, nda_catch_router
-    dp.include_router(admin_router)
-    dp.include_router(test_router)
-    dp.include_router(start_router)
-    dp.include_router(testing_router)
-    dp.include_router(nda_router)
-    dp.include_router(nda_catch_router)
-    task = asyncio.create_task(scheduler(bot, db))
+
+    dp.message.middleware(DatabaseMiddleware({}))
+    dp.callback_query.middleware(DatabaseMiddleware({}))
+
+    routers = build_handlers(settings, user_repo, slot_repo, testing_repo, submission_repo, nda_repo, stats_repo, ocr)
+    for r in routers:
+        dp.include_router(r)
+
+    scheduler = AsyncIOScheduler(timezone=settings.timezone)
+    scheduler.add_job(remind_job, "interval", seconds=30, args=[bot, settings, slot_repo])
+    scheduler.add_job(notify_job, "interval", seconds=30, args=[bot, settings, slot_repo, testing_repo])
+    scheduler.add_job(expire_job, "interval", minutes=5, args=[bot, settings, testing_repo, slot_repo])
+    scheduler.add_job(backup_job, "cron", hour=3, args=["data/stratton_bot.db", settings.backup_dir])
+    scheduler.start()
+
     logger.info("Бот запущен!")
     try:
         await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
     finally:
-        task.cancel()
-        await db.close()
+        scheduler.shutdown()
+        await db_manager.close()
         await bot.session.close()
 
 
