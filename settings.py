@@ -1,7 +1,12 @@
 import json
+from pathlib import Path
 
 from pydantic import AliasChoices, Field, computed_field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Абсолютный путь: .env ищется рядом с этим файлом, не от текущей директории процесса.
+PROJECT_ROOT = Path(__file__).resolve().parent
+DOTENV_PATH = PROJECT_ROOT / ".env"
 
 
 def _strip_env_secret(v) -> str:
@@ -16,7 +21,10 @@ def _strip_env_secret(v) -> str:
 class AppSettings(BaseSettings):
     """Settings from .env. ADMIN_IDS: comma-separated IDs or JSON array, e.g. 123,456 or [123,456]."""
 
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
+    model_config = SettingsConfigDict(
+        env_file=DOTENV_PATH,
+        env_file_encoding="utf-8",
+    )
 
     bot_token: str = Field(default="")
     gemini_api_key: str = Field(default="")

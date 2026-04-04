@@ -22,7 +22,7 @@ from aiogram.utils.token import TokenValidationError, validate_token
 from aiogram.fsm.storage.memory import MemoryStorage
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
-from settings import get_settings
+from settings import DOTENV_PATH, get_settings
 from database import DatabaseManager
 from repositories import (
     UserRepository, SlotRepository, TestingRepository,
@@ -119,8 +119,14 @@ async def main():
 
     _bad_tokens = ("", "YOUR_BOT_TOKEN_HERE", "......")
     if not settings.bot_token or settings.bot_token in _bad_tokens:
+        env_set = bool(os.environ.get("BOT_TOKEN", "").strip())
         logger.error(
-            "В .env нет корректного BOT_TOKEN (файл рядом с bot.py, без кавычек и пробелов по краям)."
+            "Нет корректного BOT_TOKEN. Ожидаемый файл: %s (существует: %s). "
+            "Переменная BOT_TOKEN в окружении процесса: %s. "
+            "На сервере создайте этот .env или задайте export BOT_TOKEN=... (без кавычек).",
+            DOTENV_PATH,
+            DOTENV_PATH.is_file(),
+            "да" if env_set else "нет",
         )
         sys.exit(1)
     try:
