@@ -13,7 +13,7 @@ stratton_bot/
 ├── dto/                    # Data Transfer Objects (dataclasses)
 ├── repositories/           # Слой доступа к данным (SQL)
 ├── services/               # Бизнес-логика
-├── AIOCR/         # Внешние сервисы (Gemini OCR)
+├── AIOCR/                  # Внешние сервисы (Gemini OCR)
 ├── handlers/               # Обработчики (только ввод/вывод)
 ├── keyboards/              # Клавиатуры
 └── static/                 # Статика (NDA шаблон)
