@@ -1,7 +1,16 @@
 import json
 
-from pydantic import AliasChoices, Field, computed_field
+from pydantic import AliasChoices, Field, computed_field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def _strip_env_secret(v) -> str:
+    if v is None:
+        return ""
+    s = str(v).strip()
+    if len(s) >= 2 and s[0] == s[-1] and s[0] in "'\"":
+        s = s[1:-1].strip()
+    return s
 
 
 class AppSettings(BaseSettings):
@@ -9,8 +18,13 @@ class AppSettings(BaseSettings):
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8")
 
-    bot_token: str = Field(default="......")
-    gemini_api_key: str = Field(default="......")
+    bot_token: str = Field(default="")
+    gemini_api_key: str = Field(default="")
+
+    @field_validator("bot_token", "gemini_api_key", mode="before")
+    @classmethod
+    def strip_secrets(cls, v):
+        return _strip_env_secret(v)
     # Stored as str so pydantic-settings does not json.loads() the env value (breaks on "1,2,3").
     admin_ids_csv: str = Field(
         default="",
