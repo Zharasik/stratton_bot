@@ -5,7 +5,6 @@ import shutil
 import sys
 from pathlib import Path
 
-# Проект должен быть в sys.path при запуске вроде `python /full/path/bot.py` (не из папки репо).
 _root = Path(__file__).resolve().parent
 if str(_root) not in sys.path:
     sys.path.insert(0, str(_root))
@@ -19,6 +18,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.enums import ParseMode
+from aiogram.utils.token import TokenValidationError, validate_token
 from aiogram.fsm.storage.memory import MemoryStorage
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
@@ -117,8 +117,19 @@ async def main():
     settings = get_settings()
     logger.info("Запуск Stratton Bot | ADMINS: %s", settings.admin_ids)
 
-    if settings.bot_token == "YOUR_BOT_TOKEN_HERE":
-        logger.error("Установите BOT_TOKEN!")
+    _bad_tokens = ("", "YOUR_BOT_TOKEN_HERE", "......")
+    if not settings.bot_token or settings.bot_token in _bad_tokens:
+        logger.error(
+            "В .env нет корректного BOT_TOKEN (файл рядом с bot.py, без кавычек и пробелов по краям)."
+        )
+        sys.exit(1)
+    try:
+        validate_token(settings.bot_token)
+    except TokenValidationError:
+        logger.error(
+            "BOT_TOKEN отклонён Telegram (неверный формат или опечатка). "
+            "Скопируйте токен заново из @BotFather."
+        )
         sys.exit(1)
 
     db_manager = DatabaseManager(settings.database_url)
