@@ -1,11 +1,12 @@
 import aiohttp
-import json
 import base64
+import json
 import logging
 from typing import Optional
 
 logger = logging.getLogger(__name__)
 GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
+
 
 class GeminiOCR:
     def __init__(self, api_key: str):
@@ -51,12 +52,13 @@ class GeminiOCR:
             return (
                 'Извлеки с фото казахстанского удостоверения (лицевая): '
                 '{"last_name":"","first_name":"","middle_name":"","iin":"","doc_number":"","birth_date":"ДД.ММ.ГГГГ"}. '
-                'Только JSON.'
+                "Если поле не видно, верни пустую строку. Только JSON."
             )
         return (
             'Извлеки с фото казахстанского удостоверения (оборотная): '
-            '{"issuing_authority":"","nationality":"","birth_place":"","doc_expiry":"ДД.ММ.ГГГГ"}. '
-            'Только JSON.'
+            '{"issuing_authority":"","nationality":"","birth_place":"","doc_expiry":"ДД.ММ.ГГГГ","doc_number":""}. '
+            "Номер документа ищи в верхнем правом углу оборотной стороны. "
+            "Если поле не видно, верни пустую строку. Только JSON."
         )
 
     @staticmethod
