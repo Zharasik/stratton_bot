@@ -3,6 +3,13 @@ import logging
 import os
 import shutil
 import sys
+from pathlib import Path
+
+# Проект должен быть в sys.path при запуске вроде `python /full/path/bot.py` (не из папки репо).
+_root = Path(__file__).resolve().parent
+if str(_root) not in sys.path:
+    sys.path.insert(0, str(_root))
+
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
