@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 class GeminiAIClient:
-    GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
+    GEMINI_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
 
     def __init__(self, api_key: str) -> None:
         if not api_key:
