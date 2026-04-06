@@ -1,0 +1,31 @@
+NDA_FIELD_KEYS = [
+    ("last_name", "nda.fields.last_name"),
+    ("first_name", "nda.fields.first_name"),
+    ("middle_name", "nda.fields.middle_name"),
+    ("iin", "nda.fields.iin"),
+    ("doc_number", "nda.fields.doc_number"),
+    ("birth_date", "nda.fields.birth_date"),
+    ("issuing_authority", "nda.fields.issuing_authority"),
+    ("phone", "nda.fields.phone"),
+    ("email", "nda.fields.email"),
+    ("address", "nda.fields.address"),
+    ("nationality", "nda.fields.nationality"),
+    ("birth_place", "nda.fields.birth_place"),
+    ("doc_expiry", "nda.fields.doc_expiry"),
+]
+
+NDA_HINT_KEYS = {
+    "last_name": "nda.hints.last_name",
+    "first_name": "nda.hints.first_name",
+    "middle_name": "nda.hints.middle_name",
+    "iin": "nda.hints.iin",
+    "doc_number": "nda.hints.doc_number",
+    "birth_date": "nda.hints.birth_date",
+    "issuing_authority": "nda.hints.issuing_authority",
+    "phone": "nda.hints.phone",
+    "email": "nda.hints.email",
+    "address": "nda.hints.address",
+    "nationality": "nda.hints.nationality",
+    "birth_place": "nda.hints.birth_place",
+    "doc_expiry": "nda.hints.doc_expiry",
+}

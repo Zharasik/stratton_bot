@@ -1,21 +1,40 @@
 # Stratton Internship Bot
 
-## Архитектура
+## Run
 
-```
-stratton_bot/
-├── bot.py                  # Точка входа, DI, планировщик
-├── settings.py             # Pydantic Settings (конфигурация)
-├── texts.py                # Все текстовые константы
-├── database/
-│   ├── models.py           # SQLAlchemy модели
-│   └── session.py          # Менеджер сессий (context manager)
-├── dto/                    # Data Transfer Objects (dataclasses)
-├── repositories/           # Слой доступа к данным (SQL)
-├── services/               # Бизнес-логика
-├── infrastructure/         # Внешние сервисы (Gemini OCR)
-├── handlers/               # Обработчики (только ввод/вывод)
-├── keyboards/              # Клавиатуры
-└── static/                 # Статика (NDA шаблон)
+```bash
+python -m stratton_bot
 ```
 
+## New structure
+
+```text
+.
+├── locales/
+│   └── ru.json
+├── static/
+│   └── nda_template.docx
+├── stratton_bot/
+│   ├── __main__.py
+│   ├── container.py
+│   ├── main.py
+│   ├── application/
+│   │   ├── ports/
+│   │   ├── services/
+│   │   └── use_cases/
+│   ├── domain/
+│   ├── infrastructure/
+│   │   ├── ai/
+│   │   ├── config/
+│   │   ├── db/
+│   │   │   └── repositories/
+│   │   ├── documents/
+│   │   ├── i18n/
+│   │   └── scheduler/
+│   └── presentation/
+│       ├── handlers/
+│       ├── keyboards/
+│       └── middlewares/
+├── requirements.txt
+└── .env
+```
