@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}NDA Admin{% endblock %}</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; background: #f5f5f5; color: #222; }
+    a { color: #2563eb; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    .navbar {
+      background: #1e293b;
+      color: #fff;
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .navbar .brand { font-weight: 700; font-size: 1.1rem; color: #fff; }
+    .navbar a { color: #94a3b8; font-size: 0.9rem; }
+    .navbar a:hover { color: #fff; text-decoration: none; }
+
+    .container { max-width: 1100px; margin: 32px auto; padding: 0 16px; }
+
+    .flash {
+      background: #dcfce7;
+      border: 1px solid #86efac;
+      color: #166534;
+      border-radius: 6px;
+      padding: 10px 16px;
+      margin-bottom: 20px;
+    }
+    .flash.error { background: #fee2e2; border-color: #fca5a5; color: #991b1b; }
+
+    .card {
+      background: #fff;
+      border-radius: 8px;
+      box-shadow: 0 1px 3px rgba(0,0,0,.1);
+      padding: 24px;
+    }
+
+    .btn {
+      display: inline-block;
+      padding: 8px 18px;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+      font-size: 0.9rem;
+      font-weight: 500;
+    }
+    .btn-primary { background: #2563eb; color: #fff; }
+    .btn-primary:hover { background: #1d4ed8; }
+    .btn-secondary { background: #e2e8f0; color: #334155; }
+    .btn-secondary:hover { background: #cbd5e1; }
+  </style>
+  {% block head %}{% endblock %}
+</head>
+<body>
+<nav class="navbar">
+  <span class="brand">NDA Admin</span>
+  <a href="{{ url_for('logout') }}">Выйти</a>
+</nav>
+<div class="container">
+  {% for msg in get_flashed_messages() %}
+    <div class="flash">{{ msg }}</div>
+  {% endfor %}
+  {% block content %}{% endblock %}
+</div>
+
+<script>
+  // Auto-authenticate via Telegram initData when opened inside Telegram
+  (function () {
+    const tg = window.Telegram && window.Telegram.WebApp;
+    if (!tg || !tg.initData) return;
+    tg.ready();
+    tg.expand();
+    fetch('/tg-auth', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ initData: tg.initData }),
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (data.ok && window.location.pathname === '/login') {
+          window.location.href = '/';
+        }
+      })
+      .catch(() => {});
+  })();
+</script>
+</body>
+</html>

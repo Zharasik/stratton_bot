@@ -42,6 +42,7 @@ class AppConfig:
     data_dir: Path
     locales_dir: Path
     static_dir: Path
+    web_app_url: str = ""
     default_locale: str = "ru"
 
     @classmethod
@@ -61,6 +62,7 @@ class AppConfig:
             max_video_size_bytes=_parse_int(os.getenv("MAX_VIDEO_SIZE_BYTES"), 10 * 1024 * 1024),
             max_retry_attempts=_parse_int(os.getenv("MAX_RETRY_ATTEMPTS"), 3),
             remind_before_minutes=_parse_int(os.getenv("REMIND_BEFORE_MINUTES"), 15),
+            web_app_url=os.getenv("WEB_APP_URL", "").strip(),
             backup_dir=Path(os.getenv("BACKUP_DIR", "data/backups")),
             data_dir=data_dir,
             locales_dir=Path(os.getenv("LOCALES_DIR", "locales")),

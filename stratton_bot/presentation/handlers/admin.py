@@ -34,7 +34,7 @@ async def cmd_admin(message: Message, config: AppConfig, localizer: Localizer) -
     except AccessDeniedError:
         await message.answer(localizer.text("alerts.no_access"))
         return
-    await message.answer(localizer.text("admin.title"), reply_markup=admin_menu(localizer))
+    await message.answer(localizer.text("admin.title"), reply_markup=admin_menu(localizer, config.web_app_url))
 
 
 @router.callback_query(F.data == "admin_stats")
@@ -63,7 +63,7 @@ async def cb_admin_stats(
             pending_reviews=summary.pending_reviews,
             nda_completed=summary.nda_completed,
         ),
-        reply_markup=admin_menu(localizer),
+        reply_markup=admin_menu(localizer, config.web_app_url),
     )
     await callback.answer()
 
@@ -82,7 +82,7 @@ async def cb_admin_users(
         return
     users = await admin_use_case.list_users()
     if not users:
-        await callback.message.edit_text(localizer.text("admin.users_empty"), reply_markup=admin_menu(localizer))
+        await callback.message.edit_text(localizer.text("admin.users_empty"), reply_markup=admin_menu(localizer, config.web_app_url))
         await callback.answer()
         return
     rows = []
@@ -99,7 +99,7 @@ async def cb_admin_users(
         )
     await callback.message.edit_text(
         localizer.text("admin.users_list", rows="\n".join(rows)),
-        reply_markup=admin_menu(localizer),
+        reply_markup=admin_menu(localizer, config.web_app_url),
     )
     await callback.answer()
 
@@ -118,7 +118,7 @@ async def cb_admin_testings(
         return
     dates = await admin_use_case.list_booked_dates()
     if not dates:
-        await callback.message.edit_text(localizer.text("admin.no_testings"), reply_markup=admin_menu(localizer))
+        await callback.message.edit_text(localizer.text("admin.no_testings"), reply_markup=admin_menu(localizer, config.web_app_url))
         await callback.answer()
         return
     builder = InlineKeyboardBuilder()
@@ -139,8 +139,8 @@ async def cb_admin_testings(
 
 
 @router.callback_query(F.data == "admin_back")
-async def cb_admin_back(callback: CallbackQuery, localizer: Localizer) -> None:
-    await callback.message.edit_text(localizer.text("admin.title"), reply_markup=admin_menu(localizer))
+async def cb_admin_back(callback: CallbackQuery, config: AppConfig, localizer: Localizer) -> None:
+    await callback.message.edit_text(localizer.text("admin.title"), reply_markup=admin_menu(localizer, config.web_app_url))
     await callback.answer()
 
 
@@ -194,7 +194,7 @@ async def cb_admin_submissions(
         return
     submissions = await submission_use_case.list_pending()
     if not submissions:
-        await callback.message.edit_text(localizer.text("admin.no_submissions"), reply_markup=admin_menu(localizer))
+        await callback.message.edit_text(localizer.text("admin.no_submissions"), reply_markup=admin_menu(localizer, config.web_app_url))
         await callback.answer()
         return
     for submission in submissions:
@@ -294,17 +294,17 @@ async def cb_admin_nda_search(callback: CallbackQuery, state: FSMContext, config
 
 
 @router.message(AdminStates.nda_search, Command("cancel"))
-async def cancel_nda_search(message: Message, state: FSMContext, localizer: Localizer) -> None:
+async def cancel_nda_search(message: Message, state: FSMContext, config: AppConfig, localizer: Localizer) -> None:
     await state.clear()
-    await message.answer(localizer.text("admin.cancelled"), reply_markup=admin_menu(localizer))
+    await message.answer(localizer.text("admin.cancelled"), reply_markup=admin_menu(localizer, config.web_app_url))
 
 
 @router.message(AdminStates.nda_search, F.text)
-async def do_nda_search(message: Message, state: FSMContext, admin_use_case: AdminUseCase, localizer: Localizer) -> None:
+async def do_nda_search(message: Message, state: FSMContext, admin_use_case: AdminUseCase, config: AppConfig, localizer: Localizer) -> None:
     await state.clear()
     matches = await admin_use_case.search_nda(message.text.strip().replace("@", ""))
     if not matches:
-        await message.answer(localizer.text("admin.nda_search_empty", query=message.text.strip()), reply_markup=admin_menu(localizer))
+        await message.answer(localizer.text("admin.nda_search_empty", query=message.text.strip()), reply_markup=admin_menu(localizer, config.web_app_url))
         return
     for nda, user in matches[:5]:
         await message.answer(
@@ -324,7 +324,7 @@ async def do_nda_search(message: Message, state: FSMContext, admin_use_case: Adm
         for photo_id in (nda.front_photo_id, nda.back_photo_id):
             if photo_id:
                 await message.bot.send_photo(message.from_user.id, photo=photo_id)
-    await message.answer(localizer.text("admin.title"), reply_markup=admin_menu(localizer))
+    await message.answer(localizer.text("admin.title"), reply_markup=admin_menu(localizer, config.web_app_url))
 
 
 @router.callback_query(F.data == "admin_export")
@@ -361,13 +361,13 @@ async def cb_admin_broadcast(callback: CallbackQuery, state: FSMContext, config:
 
 
 @router.message(AdminStates.broadcast, Command("cancel"))
-async def cancel_broadcast(message: Message, state: FSMContext, localizer: Localizer) -> None:
+async def cancel_broadcast(message: Message, state: FSMContext, config: AppConfig, localizer: Localizer) -> None:
     await state.clear()
-    await message.answer(localizer.text("admin.cancelled"), reply_markup=admin_menu(localizer))
+    await message.answer(localizer.text("admin.cancelled"), reply_markup=admin_menu(localizer, config.web_app_url))
 
 
 @router.message(AdminStates.broadcast, F.text)
-async def do_broadcast(message: Message, state: FSMContext, admin_use_case: AdminUseCase, localizer: Localizer) -> None:
+async def do_broadcast(message: Message, state: FSMContext, admin_use_case: AdminUseCase, config: AppConfig, localizer: Localizer) -> None:
     await state.clear()
     users = await admin_use_case.list_users()
     success = 0
@@ -381,5 +381,5 @@ async def do_broadcast(message: Message, state: FSMContext, admin_use_case: Admi
             logger.exception("Failed to broadcast to user_id=%s: %s", user.user_id, error)
     await message.answer(
         localizer.text("admin.broadcast_result", success=success, failed=failed),
-        reply_markup=admin_menu(localizer),
+        reply_markup=admin_menu(localizer, config.web_app_url),
     )

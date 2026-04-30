@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from stratton_bot.infrastructure.i18n.translator import Localizer
 
 
-def admin_menu(localizer: Localizer) -> InlineKeyboardMarkup:
+def admin_menu(localizer: Localizer, web_app_url: str = "") -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     items = [
         ("buttons.admin.stats", "admin_stats"),
@@ -20,6 +20,15 @@ def admin_menu(localizer: Localizer) -> InlineKeyboardMarkup:
     ]
     for key, callback_data in items:
         builder.row(InlineKeyboardButton(text=localizer.text(key), callback_data=callback_data))
+
+    if web_app_url:
+        builder.row(
+            InlineKeyboardButton(
+                text=localizer.text("buttons.admin.nda_webapp"),
+                web_app=WebAppInfo(url=web_app_url),
+            )
+        )
+
     return builder.as_markup()
 
 

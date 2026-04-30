@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}Список NDA{% endblock %}
+{% block head %}
+<style>
+  .toolbar { display: flex; gap: 12px; align-items: center; margin-bottom: 20px; }
+  .toolbar input {
+    flex: 1; padding: 9px 12px; border: 1px solid #cbd5e1;
+    border-radius: 6px; font-size: 0.9rem;
+  }
+  .toolbar input:focus { outline: 2px solid #2563eb; border-color: transparent; }
+  h1 { font-size: 1.4rem; margin-bottom: 20px; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+  th {
+    text-align: left; padding: 10px 12px;
+    background: #f1f5f9; color: #475569;
+    border-bottom: 2px solid #e2e8f0;
+    font-weight: 600; font-size: 0.8rem; text-transform: uppercase; letter-spacing: .04em;
+  }
+  td { padding: 10px 12px; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: #f8fafc; }
+
+  .badge {
+    display: inline-block; padding: 2px 8px; border-radius: 20px;
+    font-size: 0.75rem; font-weight: 600;
+  }
+  .badge-completed { background: #dcfce7; color: #166534; }
+  .badge-pending   { background: #fef9c3; color: #854d0e; }
+
+  .empty { text-align: center; padding: 48px; color: #94a3b8; }
+</style>
+{% endblock %}
+{% block content %}
+<h1>NDA записи</h1>
+<div class="card">
+  <form class="toolbar" method="get">
+    <input name="q" placeholder="Поиск по ФИО, ИИН, телефону, email…" value="{{ query }}">
+    <button class="btn btn-primary" type="submit">Найти</button>
+    {% if query %}<a class="btn btn-secondary" href="{{ url_for('index') }}">Сбросить</a>{% endif %}
+  </form>
+
+  {% if records %}
+  <table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>ФИО</th>
+        <th>ИИН</th>
+        <th>Телефон</th>
+        <th>Email</th>
+        <th>Статус</th>
+        <th>Дата</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+    {% for r in records %}
+      <tr>
+        <td>{{ r['id'] }}</td>
+        <td>
+          {{ r['last_name'] or '' }} {{ r['first_name'] or '' }} {{ r['middle_name'] or '' }}
+          {% if r['username'] %}<br><small style="color:#94a3b8">@{{ r['username'] }}</small>{% endif %}
+        </td>
+        <td>{{ r['iin'] or '—' }}</td>
+        <td>{{ r['phone'] or '—' }}</td>
+        <td>{{ r['email'] or '—' }}</td>
+        <td>
+          <span class="badge badge-{{ r['status'] }}">{{ r['status'] }}</span>
+        </td>
+        <td style="white-space:nowrap; color:#94a3b8; font-size:.8rem">{{ (r['created_at'] or '')[:10] }}</td>
+        <td><a class="btn btn-secondary" href="{{ url_for('edit', nda_id=r['id']) }}">Изменить</a></td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+    <div class="empty">Записей не найдено</div>
+  {% endif %}
+</div>
+{% endblock %}

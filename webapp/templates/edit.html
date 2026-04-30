@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Редактирование NDA #{{ record['id'] }}{% endblock %}
+{% block head %}
+<style>
+  .page-header {
+    display: flex; align-items: center; gap: 16px; margin-bottom: 24px;
+  }
+  .page-header h1 { font-size: 1.3rem; }
+  .page-header a { color: #64748b; font-size: 0.85rem; }
+
+  .meta { font-size: 0.85rem; color: #64748b; margin-bottom: 24px; }
+  .meta span { margin-right: 16px; }
+
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+  @media (max-width: 640px) { .grid { grid-template-columns: 1fr; } }
+
+  .form-group { display: flex; flex-direction: column; gap: 5px; }
+  .form-group label { font-size: 0.8rem; color: #64748b; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+  .form-group input, .form-group select {
+    padding: 9px 12px; border: 1px solid #cbd5e1;
+    border-radius: 6px; font-size: 0.95rem; background: #fff;
+  }
+  .form-group input:focus, .form-group select:focus {
+    outline: 2px solid #2563eb; border-color: transparent;
+  }
+
+  .form-actions {
+    margin-top: 24px; display: flex; gap: 12px; align-items: center;
+  }
+
+  .full-width { grid-column: 1 / -1; }
+</style>
+{% endblock %}
+{% block content %}
+<div class="page-header">
+  <a href="{{ url_for('index') }}">← Назад</a>
+  <h1>NDA #{{ record['id'] }}</h1>
+</div>
+
+<div class="card">
+  <div class="meta">
+    <span>Пользователь: <strong>{{ record['full_name'] or record['user_id'] }}</strong></span>
+    {% if record['username'] %}<span>@{{ record['username'] }}</span>{% endif %}
+    <span>Telegram ID: {{ record['user_id'] }}</span>
+    <span>Создано: {{ (record['created_at'] or '')[:16] }}</span>
+  </div>
+
+  <form method="post">
+    <div class="grid">
+      {% for field, label in fields %}
+        <div class="form-group {% if field == 'address' or field == 'issuing_authority' %}full-width{% endif %}">
+          <label>{{ label }}</label>
+          {% if field == 'status' %}
+            <select name="status">
+              {% for val in ['pending', 'completed'] %}
+                <option value="{{ val }}" {% if record['status'] == val %}selected{% endif %}>{{ val }}</option>
+              {% endfor %}
+            </select>
+          {% else %}
+            <input
+              type="{% if field == 'email' %}email{% else %}text{% endif %}"
+              name="{{ field }}"
+              value="{{ record[field] or '' }}"
+            >
+          {% endif %}
+        </div>
+      {% endfor %}
+    </div>
+
+    <div class="form-actions">
+      <button class="btn btn-primary" type="submit">Сохранить</button>
+      <a class="btn btn-secondary" href="{{ url_for('index') }}">Отмена</a>
+    </div>
+  </form>
+</div>
+{% endblock %}
