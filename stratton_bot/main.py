@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import sys
+import threading
 from pathlib import Path
 
 from aiogram import Bot, Dispatcher
@@ -33,12 +34,31 @@ def configure_logging() -> None:
     )
 
 
+def _start_webapp() -> None:
+    try:
+        import importlib.util, os
+        spec = importlib.util.spec_from_file_location(
+            "webapp", Path(__file__).parent.parent / "webapp" / "app.py"
+        )
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        port = int(os.getenv("WEBAPP_PORT", "5000"))
+        mod.app.run(host="0.0.0.0", port=port, debug=False, use_reloader=False)
+    except Exception as exc:
+        logging.getLogger(__name__).error("Webapp failed to start: %s", exc)
+
+
 async def run_async() -> None:
     configure_logging()
     logger = logging.getLogger(__name__)
 
     config = AppConfig.from_env()
     config.validate()
+
+    t = threading.Thread(target=_start_webapp, daemon=True, name="webapp")
+    t.start()
+    logger.info("Webapp started on port %s", __import__('os').getenv('WEBAPP_PORT', '5000'))
+
     container = AppContainer.build(config)
     await container.db.create_tables()
 
