@@ -11,8 +11,9 @@ from aiogram.types import CallbackQuery, FSInputFile, InlineKeyboardButton, Mess
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from stratton_bot.application.use_cases.admin import AdminUseCase
+from stratton_bot.application.use_cases.nda import NDAUseCase
 from stratton_bot.application.use_cases.submission import SubmissionUseCase
-from stratton_bot.domain.exceptions import AccessDeniedError
+from stratton_bot.domain.exceptions import AccessDeniedError, NotFoundError
 from stratton_bot.infrastructure.config.settings import AppConfig
 from stratton_bot.infrastructure.i18n.translator import Localizer
 from stratton_bot.presentation.keyboards.admin import admin_menu, admin_review
@@ -307,6 +308,11 @@ async def do_nda_search(message: Message, state: FSMContext, admin_use_case: Adm
         await message.answer(localizer.text("admin.nda_search_empty", query=message.text.strip()), reply_markup=admin_menu(localizer, config.web_app_url))
         return
     for nda, user in matches[:5]:
+        cancel_kb = InlineKeyboardBuilder()
+        cancel_kb.row(InlineKeyboardButton(
+            text=f"🗑 Отменить NDA #{nda.id}",
+            callback_data=f"admin_cancel_nda:{nda.id}",
+        ))
         await message.answer(
             localizer.text(
                 "admin.nda_search_item",
@@ -316,7 +322,8 @@ async def do_nda_search(message: Message, state: FSMContext, admin_use_case: Adm
                 phone=nda.phone,
                 email=nda.email,
                 username=f"@{user.username}" if user and user.username else "—",
-            )
+            ),
+            reply_markup=cancel_kb.as_markup(),
         )
         document_path = Path("data") / f"nda_{nda.iin}.docx"
         if document_path.exists():
@@ -383,3 +390,66 @@ async def do_broadcast(message: Message, state: FSMContext, admin_use_case: Admi
         localizer.text("admin.broadcast_result", success=success, failed=failed),
         reply_markup=admin_menu(localizer, config.web_app_url),
     )
+
+
+@router.callback_query(F.data.startswith("admin_cancel_nda:"))
+async def cb_cancel_nda(
+    callback: CallbackQuery,
+    nda_use_case: NDAUseCase,
+    config: AppConfig,
+    bot: Bot,
+    localizer: Localizer,
+) -> None:
+    try:
+        ensure_admin(callback.from_user.id, config)
+    except AccessDeniedError:
+        await callback.answer(localizer.text("alerts.no_access"), show_alert=True)
+        return
+
+    nda_id = int(callback.data.split(":", maxsplit=1)[1])
+    try:
+        user_id = await nda_use_case.cancel(nda_id)
+    except NotFoundError:
+        await callback.answer("NDA не найдена", show_alert=True)
+        return
+
+    try:
+        await callback.message.edit_reply_markup(reply_markup=None)
+    except TelegramBadRequest:
+        pass
+
+    await callback.answer(f"NDA #{nda_id} отменена")
+    await callback.message.answer(f"✅ NDA #{nda_id} отменена. Пользователь может пройти процесс заново.")
+
+    try:
+        await bot.send_message(user_id, localizer.text("messages.id_photo_front"))
+    except Exception as error:
+        logger.warning("Could not notify user_id=%s about NDA cancellation: %s", user_id, error)
+
+
+@router.message(Command("cancelnda"))
+async def cmd_cancel_nda(
+    message: Message,
+    nda_use_case: NDAUseCase,
+    config: AppConfig,
+    bot: Bot,
+    localizer: Localizer,
+) -> None:
+    ensure_admin(message.from_user.id, config)
+    parts = message.text.split()
+    if len(parts) != 2 or not parts[1].isdigit():
+        await message.answer("Использование: /cancelnda <nda_id>")
+        return
+
+    nda_id = int(parts[1])
+    try:
+        user_id = await nda_use_case.cancel(nda_id)
+    except NotFoundError:
+        await message.answer(f"NDA #{nda_id} не найдена")
+        return
+
+    await message.answer(f"✅ NDA #{nda_id} отменена. Пользователь {user_id} может пройти процесс заново.")
+    try:
+        await bot.send_message(user_id, localizer.text("messages.id_photo_front"))
+    except Exception as error:
+        logger.warning("Could not notify user_id=%s about NDA cancellation: %s", user_id, error)

@@ -54,6 +54,11 @@
 
     <div class="form-actions">
       <button class="btn btn-primary" type="submit">Подтвердить и сохранить</button>
+      {% if record['status'] == 'completed' %}
+      <a class="btn btn-secondary" href="{{ url_for('download_nda', nda_id=record['id']) }}" style="margin-left:auto">
+        📥 Скачать NDA
+      </a>
+      {% endif %}
     </div>
   </form>
 </div>

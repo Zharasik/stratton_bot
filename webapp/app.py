@@ -5,11 +5,13 @@ import hmac
 import json
 import os
 import sqlite3
+import urllib.parse
+import urllib.request
 from pathlib import Path
 from urllib.parse import parse_qsl
 
 from dotenv import load_dotenv
-from flask import Flask, flash, redirect, render_template, request, session, url_for
+from flask import Flask, flash, redirect, render_template, request, send_file, session, url_for
 
 # Load .env from project root regardless of working directory
 load_dotenv(Path(__file__).parent.parent / ".env")
@@ -69,6 +71,41 @@ def _validate_init_data(init_data: str) -> dict | None:
 
 def _is_admin(user_id: int) -> bool:
     return user_id in ADMIN_IDS
+
+
+def _notify_user(user_id: int, text: str) -> None:
+    """Send a Telegram message to a user via Bot API (fire-and-forget)."""
+    if not BOT_TOKEN:
+        return
+    try:
+        payload = json.dumps({"chat_id": user_id, "text": text, "parse_mode": "HTML"}).encode()
+        req = urllib.request.Request(
+            f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
+            data=payload,
+            headers={"Content-Type": "application/json"},
+        )
+        urllib.request.urlopen(req, timeout=5)
+    except Exception:
+        pass  # best-effort, don't break the web request
+
+
+_STATUS_MESSAGES = {
+    "pending":   "📋 Ваш NDA требует доработки. Пожалуйста, проверьте и исправьте данные.",
+    "completed": "✅ Ваш NDA подтверждён!",
+    "cancelled": "❌ Ваш NDA отменён. Отправьте фото удостоверения для повторного заполнения.",
+}
+
+
+def _nda_file_path(row) -> Path | None:
+    """Return the path to the generated NDA docx, or None if not found."""
+    root = Path(__file__).parent.parent
+    for candidate in (
+        root / "data" / f"nda_{row['iin']}.docx",
+        root / "data" / f"nda_{row['user_id']}.docx",
+    ):
+        if candidate.exists():
+            return candidate
+    return None
 
 
 def login_required(f):
@@ -151,11 +188,32 @@ def index():
     return render_template("index.html", records=rows, query=query)
 
 
+@app.route("/download/<int:nda_id>")
+@login_required
+def download_nda(nda_id: int):
+    with _db() as conn:
+        row = conn.execute("SELECT * FROM nda_records WHERE id = ?", (nda_id,)).fetchone()
+    if row is None:
+        flash("Запись не найдена")
+        return redirect(url_for("index"))
+    path = _nda_file_path(row)
+    if path is None:
+        flash("Файл NDA ещё не сформирован")
+        return redirect(url_for("edit", nda_id=nda_id))
+    name = f"NDA_{row['last_name'] or row['user_id']}.docx"
+    return send_file(path, as_attachment=True, download_name=name)
+
+
 @app.route("/nda/<int:nda_id>", methods=["GET", "POST"])
 @login_required
 def edit(nda_id: int):
     with _db() as conn:
         if request.method == "POST":
+            old_row = conn.execute(
+                "SELECT status, user_id FROM nda_records WHERE id = ?", (nda_id,)
+            ).fetchone()
+            old_status = old_row["status"] if old_row else None
+
             updates = {
                 field: request.form.get(field, "").strip() or None
                 for field, _ in NDA_FIELDS
@@ -167,6 +225,14 @@ def edit(nda_id: int):
                 values,
             )
             conn.commit()
+
+            # Notify user if status changed
+            new_status = updates.get("status")
+            if old_row and new_status and new_status != old_status:
+                msg = _STATUS_MESSAGES.get(new_status)
+                if msg:
+                    _notify_user(old_row["user_id"], msg)
+
             flash("Данные сохранены")
             return redirect(url_for("edit", nda_id=nda_id))
 
@@ -206,23 +272,14 @@ NDA_FORM_FIELDS = [
 ]
 
 
-def _form_auth(nda_row) -> bool:
-    """Allow access if: admin session OR Telegram user_id matches nda owner."""
-    if session.get("authenticated"):
-        return True
-    tg_user_id = session.get("form_user_id")
-    return tg_user_id is not None and tg_user_id == nda_row["user_id"]
+def _make_form_token(nda_id: int, user_id: int) -> str:
+    secret = app.secret_key if isinstance(app.secret_key, bytes) else app.secret_key.encode()
+    msg = f"{nda_id}:{user_id}".encode()
+    return hmac.new(secret, msg, hashlib.sha256).hexdigest()
 
 
-@app.route("/form-auth", methods=["POST"])
-def form_auth():
-    """Validate Telegram initData for a regular user (not necessarily admin)."""
-    init_data = request.json.get("initData", "") if request.is_json else ""
-    user = _validate_init_data(init_data)
-    if user:
-        session["form_user_id"] = user["id"]
-        return {"ok": True, "user_id": user["id"]}
-    return {"ok": False, "error": "Неверная подпись"}, 403
+def _verify_form_token(token: str, nda_id: int, user_id: int) -> bool:
+    return hmac.compare_digest(token, _make_form_token(nda_id, user_id))
 
 
 @app.route("/form/<int:nda_id>", methods=["GET", "POST"])
@@ -241,9 +298,18 @@ def form(nda_id: int):
     if row is None:
         return render_template("form_error.html", message="Запись не найдена"), 404
 
-    if not _form_auth(row):
-        # Not authenticated yet — show page that will auto-auth via Telegram JS
-        return render_template("form_pending_auth.html", nda_id=nda_id)
+    # Token in URL grants access (generated by bot with WEBAPP_SECRET_KEY)
+    token = request.args.get("token", "")
+    if token and _verify_form_token(token, nda_id, row["user_id"]):
+        session["form_user_id"] = row["user_id"]
+        # Redirect to clean URL without token in address bar
+        return redirect(url_for("form", nda_id=nda_id))
+
+    # Check session (set after token redirect or admin login)
+    is_admin = session.get("authenticated")
+    is_owner = session.get("form_user_id") == row["user_id"]
+    if not (is_admin or is_owner):
+        return render_template("form_error.html", message="Ссылка недействительна. Получите новую ссылку в боте через /mynda."), 403
 
     if request.method == "POST":
         with _db() as conn:

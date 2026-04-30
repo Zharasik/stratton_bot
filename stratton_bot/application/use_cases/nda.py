@@ -30,6 +30,16 @@ class NDAUseCase:
             raise NotFoundError(f"User {user_id} not found")
         return user.status
 
+    async def update_draft(self, user_id: int, fields: dict[str, str]) -> int:
+        """Update (or create) the pending draft with given fields. Returns nda_id."""
+        async with self._uow_factory() as uow:
+            draft = await uow.ndas.get_pending_by_user(user_id)
+            if draft is None:
+                draft = await uow.ndas.create(user_id)
+            await uow.ndas.update(draft.id, fields)
+            await uow.commit()
+        return draft.id
+
     async def get_or_create_draft(self, user_id: int) -> NdaRecordData:
         async with self._uow_factory() as uow:
             draft = await uow.ndas.get_pending_by_user(user_id)
@@ -86,6 +96,17 @@ class NDAUseCase:
                 raise ConflictError("User is not in NDA photo flow")
             await uow.commit()
         return next_status
+
+    async def cancel(self, nda_id: int) -> int:
+        """Cancel NDA and reset the owner's status so they can redo it. Returns user_id."""
+        async with self._uow_factory() as uow:
+            nda = await uow.ndas.get_by_id(nda_id)
+            if nda is None:
+                raise NotFoundError(f"NDA {nda_id} not found")
+            await uow.ndas.update(nda_id, {"status": "cancelled"})
+            await uow.users.set_status(nda.user_id, "awaiting_nda_front_photo")
+            await uow.commit()
+        return nda.user_id
 
     async def complete(self, *, user_id: int, fields: dict[str, str | None]) -> tuple[NdaRecordData, Path]:
         missing = [field for field in self.REQUIRED_FIELDS if not fields.get(field)]

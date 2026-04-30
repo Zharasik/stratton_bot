@@ -6,7 +6,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from stratton_bot.infrastructure.i18n.translator import Localizer
 
 
-def main_menu(localizer: Localizer, has_testing: bool) -> InlineKeyboardMarkup:
+def main_menu(localizer: Localizer, has_testing: bool, nda_url: str = "") -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
     if has_testing:
         builder.row(
@@ -41,6 +41,8 @@ def main_menu(localizer: Localizer, has_testing: bool) -> InlineKeyboardMarkup:
             )
         )
     builder.row(InlineKeyboardButton(text=localizer.text("buttons.menu.progress"), callback_data="my_progress"))
+    if nda_url:
+        builder.row(InlineKeyboardButton(text=localizer.text("buttons.menu.my_nda"), url=nda_url))
     builder.row(InlineKeyboardButton(text=localizer.text("buttons.menu.faq"), callback_data="faq"))
     builder.row(InlineKeyboardButton(text=localizer.text("buttons.menu.company"), callback_data="about_company"))
     builder.row(InlineKeyboardButton(text=localizer.text("buttons.menu.contacts"), callback_data="contacts"))

@@ -43,6 +43,7 @@ class AppConfig:
     locales_dir: Path
     static_dir: Path
     web_app_url: str = ""
+    webapp_secret_key: str = "change-me-in-production"
     default_locale: str = "ru"
 
     @classmethod
@@ -63,6 +64,7 @@ class AppConfig:
             max_retry_attempts=_parse_int(os.getenv("MAX_RETRY_ATTEMPTS"), 3),
             remind_before_minutes=_parse_int(os.getenv("REMIND_BEFORE_MINUTES"), 15),
             web_app_url=os.getenv("WEB_APP_URL", "").strip(),
+            webapp_secret_key=os.getenv("WEBAPP_SECRET_KEY", "change-me-in-production").strip(),
             backup_dir=Path(os.getenv("BACKUP_DIR", "data/backups")),
             data_dir=data_dir,
             locales_dir=Path(os.getenv("LOCALES_DIR", "locales")),

@@ -74,6 +74,9 @@
     <div class="form-actions">
       <button class="btn btn-primary" type="submit">Сохранить</button>
       <a class="btn btn-secondary" href="{{ url_for('index') }}">Отмена</a>
+      <a class="btn btn-secondary" href="{{ url_for('download_nda', nda_id=record['id']) }}" style="margin-left:auto">
+        📥 Скачать NDA
+      </a>
     </div>
   </form>
 </div>

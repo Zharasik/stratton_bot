@@ -22,12 +22,17 @@ def admin_menu(localizer: Localizer, web_app_url: str = "") -> InlineKeyboardMar
         builder.row(InlineKeyboardButton(text=localizer.text(key), callback_data=callback_data))
 
     if web_app_url:
-        builder.row(
-            InlineKeyboardButton(
+        if web_app_url.startswith("https://"):
+            btn = InlineKeyboardButton(
                 text=localizer.text("buttons.admin.nda_webapp"),
                 web_app=WebAppInfo(url=web_app_url),
             )
-        )
+        else:
+            btn = InlineKeyboardButton(
+                text=localizer.text("buttons.admin.nda_webapp"),
+                url=web_app_url,
+            )
+        builder.row(btn)
 
     return builder.as_markup()
 
