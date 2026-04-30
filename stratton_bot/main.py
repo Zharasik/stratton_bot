@@ -55,12 +55,12 @@ async def run_async() -> None:
     config = AppConfig.from_env()
     config.validate()
 
+    container = AppContainer.build(config)
+    await container.db.create_tables()
+
     t = threading.Thread(target=_start_webapp, daemon=True, name="webapp")
     t.start()
     logger.info("Webapp started on port %s", __import__('os').getenv('WEBAPP_PORT', '5000'))
-
-    container = AppContainer.build(config)
-    await container.db.create_tables()
 
     bot = Bot(
         token=config.bot_token,

@@ -12,6 +12,20 @@ class SqlAlchemyNDARepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
 
+    async def get_pending_by_user(self, user_id: int) -> NdaRecordData | None:
+        result = await self._session.execute(
+            select(NdaRecordModel)
+            .where(NdaRecordModel.user_id == user_id, NdaRecordModel.status == "pending")
+            .order_by(NdaRecordModel.created_at.desc())
+            .limit(1)
+        )
+        record = result.scalar_one_or_none()
+        return to_nda_entity(record) if record else None
+
+    async def get_by_id(self, nda_id: int) -> NdaRecordData | None:
+        record = await self._session.get(NdaRecordModel, nda_id)
+        return to_nda_entity(record) if record else None
+
     async def create(self, user_id: int) -> NdaRecordData:
         record = NdaRecordModel(user_id=user_id)
         self._session.add(record)

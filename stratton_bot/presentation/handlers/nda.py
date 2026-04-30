@@ -5,7 +5,8 @@ import logging
 
 from aiogram import Bot, F, Router
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, FSInputFile, Message
+from aiogram.types import CallbackQuery, FSInputFile, InlineKeyboardButton, InlineKeyboardMarkup, Message, WebAppInfo
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from stratton_bot.application.use_cases.nda import NDAUseCase
 from stratton_bot.domain.exceptions import ConflictError, NotFoundError, ValidationError
@@ -149,6 +150,7 @@ async def catch_nda_photo(
     message: Message,
     state: FSMContext,
     nda_use_case: NDAUseCase,
+    config: AppConfig,
     localizer: Localizer,
     bot: Bot,
 ) -> None:
@@ -163,18 +165,29 @@ async def catch_nda_photo(
     nda_data = (await state.get_data()).get("nda_data", {})
     photo_id = message.photo[-1].file_id
     nda_data["front_photo_id" if status == "awaiting_nda_front_photo" else "back_photo_id"] = photo_id
+    nda_id: int | None = (await state.get_data()).get("nda_id")
     try:
         image_bytes = await download_file_bytes(bot, photo_id)
-        extraction = await nda_use_case.process_photo(user_id=message.from_user.id, image_bytes=image_bytes)
+        extraction, nda_id = await nda_use_case.process_photo(
+            user_id=message.from_user.id, image_bytes=image_bytes
+        )
         nda_data.update({key: value for key, value in extraction.payload.items() if value})
     except Exception as error:
         logger.exception("Failed to process NDA photo for user_id=%s: %s", message.from_user.id, error)
-        await nda_use_case.advance_photo_step(message.from_user.id)
+        next_status = await nda_use_case.advance_photo_step(message.from_user.id)
+        # Still grab the draft id after advancing
+        if nda_id is None:
+            try:
+                draft = await nda_use_case.get_or_create_draft(message.from_user.id)
+                nda_id = draft.id
+            except Exception:
+                pass
         try:
             await waiting_message.edit_text(localizer.text("nda.ocr_failed"))
         except Exception as edit_error:
             logger.warning("Failed to update waiting message_id=%s: %s", waiting_message.message_id, edit_error)
-    await state.update_data(nda_data=nda_data)
+
+    await state.update_data(nda_data=nda_data, nda_id=nda_id)
 
     try:
         await waiting_message.delete()
@@ -186,8 +199,23 @@ async def catch_nda_photo(
         await message.answer(localizer.text("messages.id_photo_back"))
         return
 
+    # Both photos processed — offer webapp form link + Telegram editing
     await state.set_state(NDAStates.editing_fields)
-    await message.answer(localizer.text("nda.fields_title"), reply_markup=nda_fields(localizer, nda_data))
+
+    if config.web_app_url and nda_id:
+        form_url = f"{config.web_app_url}/form/{nda_id}"
+        builder = InlineKeyboardBuilder()
+        builder.row(InlineKeyboardButton(
+            text=localizer.text("buttons.nda.open_form"),
+            web_app=WebAppInfo(url=form_url),
+        ))
+        builder.row(InlineKeyboardButton(
+            text=localizer.text("buttons.nda.edit_in_telegram"),
+            callback_data="nda_show_fields",
+        ))
+        await message.answer(localizer.text("nda.choose_edit_method"), reply_markup=builder.as_markup())
+    else:
+        await message.answer(localizer.text("nda.fields_title"), reply_markup=nda_fields(localizer, nda_data))
 
 
 @router.message(F.text)

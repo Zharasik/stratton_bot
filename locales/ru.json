@@ -85,7 +85,9 @@
       "reject": "❌ Отклонить"
     },
     "nda": {
-      "to_fields": "🔙 К полям"
+      "to_fields": "🔙 К полям",
+      "open_form": "🌐 Открыть форму в браузере",
+      "edit_in_telegram": "✏️ Редактировать в Telegram"
     }
   },
   "alerts": {
@@ -177,6 +179,7 @@
     "user_document_ready": "✅ Ваш NDA готов",
     "processing": "⏳ Распознаю документ...",
     "ocr_failed": "⚠️ Не удалось распознать документ. Продолжаем с ручным заполнением.",
+    "choose_edit_method": "✅ Документ распознан. Как хотите проверить данные?",
     "admin_created": "📄 <b>NDA #{nda_id}</b>\n👤 {full_name}\n🆔 {iin}\n📱 {phone}\n🏷 {username}",
     "fields": {
       "last_name": "Фамилия",

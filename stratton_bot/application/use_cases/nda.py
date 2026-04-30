@@ -30,11 +30,23 @@ class NDAUseCase:
             raise NotFoundError(f"User {user_id} not found")
         return user.status
 
-    async def process_photo(self, *, user_id: int, image_bytes: bytes) -> OCRExtraction:
+    async def get_or_create_draft(self, user_id: int) -> NdaRecordData:
+        async with self._uow_factory() as uow:
+            draft = await uow.ndas.get_pending_by_user(user_id)
+            if draft is None:
+                draft = await uow.ndas.create(user_id)
+                await uow.commit()
+        return draft
+
+    async def process_photo(
+        self, *, user_id: int, image_bytes: bytes
+    ) -> tuple[OCRExtraction, int]:
+        """Run OCR, persist extracted fields to DB draft, return (extraction, nda_id)."""
         async with self._uow_factory() as uow:
             user = await uow.users.get_by_id(user_id)
             if user is None:
                 raise NotFoundError(f"User {user_id} not found")
+
             if user.status == "awaiting_nda_front_photo":
                 extraction = await self._ocr_use_case.recognize_front(image_bytes)
                 await uow.users.set_status(user_id, "awaiting_nda_back_photo")
@@ -43,8 +55,17 @@ class NDAUseCase:
                 await uow.users.set_status(user_id, "nda_editing")
             else:
                 raise ConflictError("User is not in NDA photo flow")
+
+            # Persist extracted fields to the draft record immediately
+            draft = await uow.ndas.get_pending_by_user(user_id)
+            if draft is None:
+                draft = await uow.ndas.create(user_id)
+            fields_to_save = {k: v for k, v in extraction.payload.items() if v}
+            if fields_to_save:
+                await uow.ndas.update(draft.id, fields_to_save)
             await uow.commit()
-        return extraction
+
+        return extraction, draft.id
 
     async def advance_photo_step(self, user_id: int) -> str:
         async with self._uow_factory() as uow:
@@ -52,6 +73,10 @@ class NDAUseCase:
             if user is None:
                 raise NotFoundError(f"User {user_id} not found")
             if user.status == "awaiting_nda_front_photo":
+                # Still create the draft so we have an id for the webapp link
+                draft = await uow.ndas.get_pending_by_user(user_id)
+                if draft is None:
+                    await uow.ndas.create(user_id)
                 await uow.users.set_status(user_id, "awaiting_nda_back_photo")
                 next_status = "awaiting_nda_back_photo"
             elif user.status == "awaiting_nda_back_photo":
@@ -68,7 +93,10 @@ class NDAUseCase:
             raise ValidationError(", ".join(missing))
 
         async with self._uow_factory() as uow:
-            nda = await uow.ndas.create(user_id)
+            # Reuse existing draft if available, otherwise create new
+            nda = await uow.ndas.get_pending_by_user(user_id)
+            if nda is None:
+                nda = await uow.ndas.create(user_id)
             await uow.ndas.update(nda.id, {**fields, "status": "completed"})
             await uow.users.set_status(user_id, "nda_completed")
             final_nda = NdaRecordData(id=nda.id, user_id=user_id, status="completed")

@@ -77,15 +77,25 @@
     if (!tg || !tg.initData) return;
     tg.ready();
     tg.expand();
-    fetch('/tg-auth', {
+
+    const path = window.location.pathname;
+    const isFormPage = path.startsWith('/form/');
+
+    // For /form/* pages use /form-auth (user auth), otherwise /tg-auth (admin auth)
+    const authEndpoint = isFormPage ? '/form-auth' : '/tg-auth';
+
+    fetch(authEndpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ initData: tg.initData }),
     })
       .then(r => r.json())
       .then(data => {
-        if (data.ok && window.location.pathname === '/login') {
-          window.location.href = '/';
+        if (data.ok) {
+          // Reload to show the authenticated view
+          if (path === '/login' || document.getElementById('pending-auth')) {
+            window.location.reload();
+          }
         }
       })
       .catch(() => {});
