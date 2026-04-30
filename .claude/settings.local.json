@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xargs grep *)",
+      "Bash(gh pr *)",
+      "Bash(where gh *)",
+      "Bash(winget list *)",
+      "PowerShell(Get-Command gh -ErrorAction SilentlyContinue)",
+      "Read(//c/Program Files/**)",
+      "Read(//c/Users/acer/AppData/Local/Programs/**)"
+    ]
+  }
+}
