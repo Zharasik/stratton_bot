@@ -29,6 +29,7 @@ class AppConfig:
     gemini_api_key: str
     admin_ids: list[int]
     group_invite_link: str
+    group_chat_id: int | None
     database_url: str
     timezone: str
     slot_start_hour: int
@@ -52,6 +53,7 @@ class AppConfig:
             gemini_api_key=os.getenv("GEMINI_API_KEY", "").strip(),
             admin_ids=_parse_admin_ids(os.getenv("ADMIN_IDS")),
             group_invite_link=os.getenv("GROUP_INVITE_LINK", "").strip(),
+            group_chat_id=_parse_int(os.getenv("GROUP_CHAT_ID"), 0) or None,
             database_url=os.getenv("DATABASE_URL", "sqlite+aiosqlite:///data/stratton_bot.db").strip(),
             timezone=os.getenv("TIMEZONE", "Asia/Almaty").strip(),
             slot_start_hour=_parse_int(os.getenv("SLOT_START_HOUR"), 7),

@@ -241,8 +241,18 @@ async def cb_review_accept(
         logger.warning("Failed to clear review markup for message_id=%s: %s", callback.message.message_id, error)
     await callback.answer(localizer.text("admin.accepted_short"))
     await bot.send_message(outcome.user.user_id, localizer.text("messages.accepted"))
-    if config.group_invite_link:
-        await bot.send_message(outcome.user.user_id, localizer.text("messages.group_link", link=config.group_invite_link))
+    invite_link: str | None = None
+    if config.group_chat_id:
+        try:
+            result = await bot.create_chat_invite_link(config.group_chat_id, member_limit=1)
+            invite_link = result.invite_link
+        except Exception:
+            logger.exception("Failed to create one-time invite link for chat_id=%s", config.group_chat_id)
+            invite_link = config.group_invite_link or None
+    elif config.group_invite_link:
+        invite_link = config.group_invite_link
+    if invite_link:
+        await bot.send_message(outcome.user.user_id, localizer.text("messages.group_link", link=invite_link))
     await bot.send_message(outcome.user.user_id, localizer.text("messages.group_welcome"))
     await bot.send_message(outcome.user.user_id, localizer.text("messages.nda_intro"))
     template_path = config.static_dir / "nda_template.docx"
