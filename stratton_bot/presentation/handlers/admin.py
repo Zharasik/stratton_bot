@@ -27,6 +27,23 @@ def ensure_admin(user_id: int, config: AppConfig) -> None:
     AdminUseCase.ensure_admin(user_id, config.admin_ids)
 
 
+@router.message(Command("testlink"))
+async def cmd_testlink(message: Message, config: AppConfig, bot: Bot) -> None:
+    try:
+        ensure_admin(message.from_user.id, config)
+    except AccessDeniedError:
+        await message.answer("Нет доступа.")
+        return
+    if not config.group_chat_id:
+        await message.answer("GROUP_CHAT_ID не задан в конфиге.")
+        return
+    try:
+        result = await bot.create_chat_invite_link(config.group_chat_id, member_limit=1)
+        await message.answer(f"Тестовая одноразовая ссылка:\n{result.invite_link}")
+    except Exception as e:
+        await message.answer(f"Ошибка при создании ссылки:\n{e}")
+
+
 @router.message(Command("admin"))
 async def cmd_admin(message: Message, config: AppConfig, localizer: Localizer) -> None:
     try:
